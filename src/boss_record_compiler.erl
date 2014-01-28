@@ -117,7 +117,7 @@ edoc_module(File, Options) ->
                         Options).
 
 process_tokens(Tokens) ->
-    lager:info("Tokens ~p",[Tokens]),
+    
     process_tokens(Tokens, [], []).
 
 process_tokens([{']',_},
@@ -149,7 +149,6 @@ process_tokens([{'-',_N             } = T1,
                 {')',_}|Rest]  = _T, 
                TokenAcc, []) ->  
    % lager:notice("Tokens ~p", [_T]) , 
-    lager:info("Var Type ~p",[VarType]),
     process_tokens(Rest, lists:reverse([T1, T2, T3, T4, T5, T6, T7], TokenAcc), [{'Id', VarType}]);
 
 process_tokens([{',',_}               = T1,
@@ -159,8 +158,6 @@ process_tokens([{',',_}               = T1,
                 {'(',_},
                 {')',_} |Rest] = _T, 
                TokenAcc, Acc) ->
-%    lager:notice("Tokens ~p", [_T]),
-    lager:info("Var Type ~p",[VarType]),
     process_tokens(Rest, lists:reverse([T1, T2], TokenAcc), [{VarName, VarType}|Acc]);
 
 process_tokens([H|T], TokenAcc, Acc) ->
@@ -217,12 +214,11 @@ make_generated_forms(ModuleName, Parameters, _TokenInfo, _Attributes,
                      _Counters, _Dup = true) ->
     DupFields = Parameters -- sets:to_list(sets:from_list(Parameters)),
     lager:error("Unable to compile module ~p due to duplicate field(s) ~p",
-               [ModuleName, DupFields]),
+                [ModuleName, DupFields]),
     {error, "Duplicate Fields"};
 
 make_generated_forms(ModuleName, Parameters, TokenInfo, Attributes,
                      Counters, _Dup = false) ->
-    lager:notice("Module \"~p\" Parameters ~p Attributes~p", [ModuleName,Parameters, Attributes]),
     GF = attribute_names_forms(ModuleName, Parameters)                  ++
         attribute_types_forms(ModuleName, TokenInfo)               ++
         database_columns_forms(ModuleName, Parameters, Attributes) ++
