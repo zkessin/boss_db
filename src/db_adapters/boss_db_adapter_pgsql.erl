@@ -24,7 +24,7 @@ init(Options) ->
     DBDatabase  = proplists:get_value(db_database, Options, "test"),
     DBConfigure = proplists:get_value(db_configure, Options, []),
     pgsql:connect(DBHost, DBUsername, DBPassword, 
-        [{port, DBPort}, {database, DBDatabase} | DBConfigure]).
+                  [{port, DBPort}, {database, DBDatabase} | DBConfigure]).
 
 terminate(Conn) ->
     pgsql:close(Conn).

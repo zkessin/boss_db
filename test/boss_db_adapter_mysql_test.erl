@@ -1,15 +1,49 @@
 -module(boss_db_adapter_mysql_test).
--include_lib("proper/include/proper.hrl").
--include_lib("eunit/include/eunit.hrl").
+-include("std.hrl").
+
 -compile(export_all).
 
-pack_datetime_test() ->
-    ?assert(proper:quickcheck(prop_pack_date_tuple(),
-                              [{to_file, user}])),
-    ?assert(proper:quickcheck(prop_pack_datetime_tuple(),
-                              [{to_file, user}])),
+prop_test_ () ->
+     gen([
+          fun prop_pack_date_tuple/0,
+          fun prop_pack_datetime_tuple/0,
+          fun prop_build_conditions1/0,
+          {pack_value, 1}
+          ], boss_db_adapter_mysql,200,1).
 
-    ok.
+-type key()      :: nonempty_string().
+-type equals()   :: equals|not_equals.
+-type matches()  :: matches|not_matches.
+-type rel()      :: gt|lt|ge|le.
+-type in()       :: in|not_in.
+-type match()    :: matches|not_matches.
+-type contains() :: contains_all| not_contains_all| contains_any| contains_none.
+-type comp()     :: equals()|in()|rel()|match()|contains().
+
+-type nothing()  :: null|undefined.
+prop_build_conditions1() ->
+    ?FORALL(Conds ,
+            [union([{key(), equals(),   nothing()},
+                    {key(), equals(),   nonempty_string()},
+                    {key(), in(),       nonempty_string()},
+                    {key(), in(),       {neg_integer(),pos_integer()}},
+                    {key(), rel(),      number()},
+                    {key(), matches(),  nonempty_string()},
+                    {key(), contains,   nonempty_string()},
+                    {key(), contains(),  [nonempty_string()]}
+                    ])],
+            begin
+                CondsR = boss_db_adapter_mysql:build_conditions1(Conds, [" TEST"]),
+                case length(Conds) + 1 =:= length(CondsR) of
+                    true  -> true;
+                    false ->
+                        ?debugVal(Conds),
+                        ?debugVal(CondsR),
+                        false
+                     end
+            end).
+
+
 -type year()   :: 1900..9999.
 -type month()  :: 1..12.
 -type day()    :: 1..31.
@@ -61,5 +95,4 @@ datetime_format(DateTime = {{Y,M,D},{H,Min, S}}) ->
 
 substr_to_i(Result, S, E) ->
     {I,_} = string:to_integer(string:sub_string(Result, S, E)),
-    I
-.
+    I.
