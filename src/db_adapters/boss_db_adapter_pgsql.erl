@@ -430,8 +430,6 @@ escape_sql1([C|Rest], Acc) ->
 
 
 -spec(pack_datetime(date_time()) -> string()|iolist()).
-pack_datetime({Date, {Y, M, S}}) when is_float(S) ->
-    pack_datetime({Date, {Y, M, erlang:round(S)}});
 pack_datetime(DateTime) ->
     "TIMESTAMP " ++dh_date:format("'Y-m-dTH:i:s'",DateTime).
     
