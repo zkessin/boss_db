@@ -6,9 +6,9 @@
 prop_test_ () ->
      gen([
           fun prop_pack_date_tuple/0,
-          fun prop_pack_datetime_tuple/0,
-          fun prop_build_conditions1/0,
-          {pack_value, 1}
+          fun prop_pack_datetime_tuple/0
+%          fun prop_build_conditions1/0,
+%          {pack_value, 1}
           ], boss_db_adapter_mysql,200,1).
 
 -type key()      :: nonempty_string().
