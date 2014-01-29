@@ -5,61 +5,6 @@
 -export([push/2, pop/2, dump/1, execute/2, transaction/2]).
 -export([get_migrations_table/1, migration_done/3]).
 -compile(export_all).
--include_lib("emysql/include/emysql.hrl").
--type nothing()  ::null|undefined.
--type date()     ::calendar:date().
--type datetime() ::calendar:datetime().
-
--spec start(_) -> 'ok'.
--spec stop() -> 'ok'.
--spec init([any()]) -> {'error',_} | {'ok',pid()}.
--spec terminate(pid() | port()) -> 'true'.
--spec find(atom() | pid() | port() | {atom(),atom()},maybe_improper_list(binary() | maybe_improper_list(any(),binary() | []) | char(),binary() | [])) -> any().
--spec find(_,atom(),maybe_improper_list(),'all' | integer(),integer(),atom(),atom()) -> [any()] | {'error',_}.
--spec count(atom() | pid() | port() | {atom(),atom()},atom() | tuple(),[any()]) -> any().
--spec counter(atom() | pid() | port() | {atom(),atom()},[any()]) -> any().
--spec incr(atom() | pid() | port() | {atom(),atom()},'false' | 'null' | 'true' | 'undefined' | binary() | [any()] | number() | {{_,_,_},{_,_,_}} | {_,_,_},'false' | 'null' | 'true' | 'undefined' | binary() | [any()] | number() | {{_,_,_},{_,_,_}} | {_,_,_}) -> any().
--spec delete(atom() | pid() | port() | {atom(),atom()},maybe_improper_list(binary() | maybe_improper_list(any(),binary() | []) | char(),binary() | [])) -> 'ok' | {'error',_}.
--spec save_record(atom() | pid() | port() | {atom(),atom()},tuple()) -> {'error',_} | {'ok',_}.
--spec push(atom() | pid() | port() | {atom(),atom()},integer()) -> any().
--spec pop(atom() | pid() | port() | {atom(),atom()},integer()) -> any().
--spec dump(_) -> [].
--spec execute(atom() | pid() | port() | {atom(),atom()},binary() | maybe_improper_list(binary() | maybe_improper_list(any(),binary() | []) | byte(),binary() | [])) -> any().
--spec transaction(atom() | pid() | port() | {atom(),atom()},fun()) -> {'aborted','error' | {'EXIT',_} | {'error',_}} | {'atomic',_}.
--spec do_transaction(atom() | pid() | port() | {atom(),atom()},fun()) -> {'aborted','error' | {'EXIT',_} | {'error',_}} | {'atomic',_}.
--spec do_begin(atom() | pid() | port() | {atom(),atom()},_) -> any().
--spec do_commit(atom() | pid() | port() | {atom(),atom()},_) -> any().
--spec do_rollback(atom() | pid() | port() | {atom(),atom()},_) -> any().
--spec get_migrations_table(atom() | pid() | port() | {atom(),atom()}) -> any().
--spec migration_done(atom() | pid() | port() | {atom(),atom()},atom(),'down' | 'up') -> any().
--spec activate_record(_,_,atom()) -> any().
--spec keyindex(_,_,maybe_improper_list()) -> any().
--spec keyindex(_,_,maybe_improper_list(),_) -> any().
--spec sort_order_sql('ascending' | 'descending') -> [65 | 67 | 68 | 69 | 83,...].
--spec build_insert_query(tuple()) -> [any(),...].
--spec escape_attr([any()]) -> [[any(),...]].
--spec build_update_query(atom() | tuple()) -> [any(),...].
--spec build_select_query(atom() | tuple(),[any()],'all' | integer(),_,atom(),'ascending' | 'descending') -> [any(),...].
--spec build_conditions(atom() | tuple(),[any()]) -> any().
--spec build_conditions1([{atom() | [any()] | number(),atom(),_}],_) -> any().
--spec add_cond(_,atom() | string() | number(),atom() | string() | number(),atom() | string() | number()) -> nonempty_maybe_improper_list().
--spec pack_match(atom() | string() | number()) -> string().
--spec pack_match_not(atom() | string() | number()) -> string().
--spec pack_boolean_query([any()],_) -> nonempty_string().
--spec pack_set([any()]) -> nonempty_string().
--spec pack_range('false' | 'null' | 'true' | 'undefined' | binary() | maybe_improper_list() | number() | {{_,_,_},{_,_,_}} | {_,_,_},'false' | 'null' | 'true' | 'undefined' | binary() | maybe_improper_list() | number() | {{_,_,_},{_,_,_}} | {_,_,_}) -> nonempty_maybe_improper_list().
--spec escape_sql([any()]) -> [any()].
--spec escape_sql1([any()],[any()]) -> [any()].
--spec pack_datetime(datetime()) -> any().
--spec pack_date(date()) -> any().
-
--spec pack_value(boolean()| nothing() | binary() | string() | number() | datetime() | date()) -> string()|binary().
-
--spec fetch(atom() | pid() | port() | {atom(),atom()},binary() | maybe_improper_list(binary() | maybe_improper_list(any(),binary() | []) | byte(),binary() | [])) -> 
-                   #ok_packet{}|#result_packet{}|#error_packet{}.
-                  
-                                                                                                                                                                          
-
 start(_) ->
     ok.
 
@@ -67,7 +12,6 @@ stop() ->
     ok.
 
 init(Options) ->
-    PoolSize     = proplists:get_value(db_poolsize, Options, 5),
     DBHost       = proplists:get_value(db_host,     Options, "localhost"),
     DBPort       = proplists:get_value(db_port,     Options, 3306),
     DBUsername   = proplists:get_value(db_username, Options, "guest"),
@@ -75,184 +19,138 @@ init(Options) ->
     DBDatabase   = proplists:get_value(db_database, Options, "test"),
     DBIdentifier = proplists:get_value(db_shard_id, Options, boss_pool),
     Encoding     = utf8,
-    case emysql:add_pool(DBIdentifier,
-                    PoolSize,
-                    DBUsername,
-                    DBPassword,
-                    DBHost,
-                    DBPort,
-                    DBDatabase,
-                    Encoding) of
-        {reply, ok, State} ->
-            {ok,State};
-        {reply, {error, E}}->
-            lager:error("Unable to create Mysql Connection Pool due to ~p", [E]),
-            {error, E}
-    end.
+    mysql_conn:start_link(DBHost, DBPort, DBUsername, DBPassword, DBDatabase, 
+        fun(_, _, _, _) -> ok end, Encoding, DBIdentifier).
 
 terminate(Pid) -> 
     exit(Pid, normal).
 
-find(DBPool, Id) when is_list(Id) ->
+find(Pid, Id) when is_list(Id) ->
     {Type, TableName, IdColumn, TableId} = boss_sql_lib:infer_type_from_id(Id),
-    Res = emysql:execute(DBPool, ["SELECT * FROM `", TableName, "` WHERE `", IdColumn, "` = ?"], [TableId]),
+    Res = fetch(Pid, ["SELECT * FROM ", TableName, " WHERE ", IdColumn, " = ", pack_value(TableId)]),
     case Res of
-        #result_packet{ rows = []} ->
-            {error, not_found};
-        #result_packet{
-           field_list = Columns,
-           rows       = [Row]
-          } ->
-            IsLoaded = boss_record_lib:ensure_loaded(Type),
-            activate_if_loaded(Type, Columns, Row, IsLoaded);
-        #error_packet{}  ->
-            {error, Res#error_packet.msg}
+        {data, MysqlRes} ->
+            case mysql:get_result_rows(MysqlRes) of
+                [] -> undefined;
+                [Row] ->
+                    Columns = mysql:get_result_field_info(MysqlRes),
+                    case boss_record_lib:ensure_loaded(Type) of
+                        true  -> activate_record(Row, Columns, Type);
+                        false -> {error, {module_not_loaded, Type}}
+                    end
+            end;
+        {error, MysqlRes} ->
+            {error, mysql:get_result_reason(MysqlRes)}
     end.
 
-activate_if_loaded(Type, Columns, Row, true) ->
-    activate_record(Row, Columns, Type);
-activate_if_loaded(Type, _, _, false) ->
-    {error, {module_not_loaded, Type}}.
-    
-
-%% REFAC
-find(Pid, Type, Conditions, Max, Skip, Sort, SortOrder) when is_atom(Type), 
-                                                             is_list(Conditions), 
-                                                             is_integer(Max) orelse Max =:= all, 
-                                                             is_integer(Skip), 
-                                                             is_atom(Sort),
-                                                             is_atom(SortOrder) ->
-    io:format("Pid ~p", [Pid]),
+find(Pid, Type, Conditions, Max, Skip, Sort, SortOrder) when is_atom(Type), is_list(Conditions), 
+                                                              is_integer(Max) orelse Max =:= all, is_integer(Skip), 
+                                                              is_atom(Sort), is_atom(SortOrder) ->
     case boss_record_lib:ensure_loaded(Type) of
         true ->
             Query = build_select_query(Type, Conditions, Max, Skip, Sort, SortOrder),
-            io:format("Query ~p~n", [Query]),
-            Res = emysql:execute(Pid, Query),
-                
+            Res = fetch(Pid, Query),
+
             case Res of
-                #error_packet{}  ->
-                    {error, Res#error_packet.msg};
-                #result_packet{
-                   field_list = Columns,
-                   rows       = ResultRows 
-                   } ->
+                {data, MysqlRes} ->
+                    Columns = mysql:get_result_field_info(MysqlRes),
+                    ResultRows = mysql:get_result_rows(MysqlRes),
                     FilteredRows = case {Max, Skip} of
-                                       {all, Skip} when Skip > 0 ->
-                                           lists:nthtail(Skip, ResultRows);
-                                       _ ->
-                                           ResultRows
-                                   end,
+                        {all, Skip} when Skip > 0 ->
+                            lists:nthtail(Skip, ResultRows);
+                        _ ->
+                            ResultRows
+                    end,
                     lists:map(fun(Row) ->
-                                      activate_record(Row, Columns, Type)
-                              end, FilteredRows)
+                                activate_record(Row, Columns, Type)
+                        end, FilteredRows);
+                {error, MysqlRes} ->
+                    {error, mysql:get_result_reason(MysqlRes)}
             end;
         false -> {error, {module_not_loaded, Type}}
     end.
 
-
 count(Pid, Type, Conditions) ->
     ConditionClause = build_conditions(Type, Conditions),
     TableName = boss_record_lib:database_table(Type),
-    Res = emysql:execute(Pid, ["SELECT COUNT(*) AS count FROM ", TableName, " WHERE ", ConditionClause]),
+    Res = fetch(Pid, ["SELECT COUNT(*) AS count FROM ", TableName, " WHERE ", ConditionClause]),
     case Res of
-        #error_packet{}  ->
-            {error, Res#error_packet.msg};
-        #result_packet{
-           rows       = [[Count]]
-          } ->
-            Count
+        {data, MysqlRes} ->
+            [[Count]] = mysql:get_result_rows(MysqlRes),
+            Count;
+        {error, MysqlRes} ->
+            {error, mysql:get_result_reason(MysqlRes)}
     end.
-%%REFAC
+
 counter(Pid, Id) when is_list(Id) ->
-    Res = emysql:execute(Pid, ["SELECT value FROM counters WHERE name = ", pack_value(Id)]),
+    Res = fetch(Pid, ["SELECT value FROM counters WHERE name = ", pack_value(Id)]),
     case Res of
-        #error_packet{}  ->
-            {error, Res#error_packet.msg};
-        #result_packet{
-           rows       = [[Count]]
-          } ->
-            Count
-    end. 
+        {data, MysqlRes} ->
+            [[Value]] = mysql:get_result_rows(MysqlRes),
+            Value;
+        {error, _Reason} -> 0
+    end.
 
-%%REFAC This one needs work
 incr(Pid, Id, Count) ->
-    Res = emysql:execute(Pid, ["UPDATE counters SET value = value + ", pack_value(Count), 
+    Res = fetch(Pid, ["UPDATE counters SET value = value + ", pack_value(Count), 
             " WHERE name = ", pack_value(Id)]),
-      case Res of
-        #error_packet{}  ->
-            {error, Res#error_packet.msg};
-        #result_packet{
-           rows       = [[Count]]
-          } ->
-            Count
-    end. 
-%% case Res of
-%%         {updated, _} ->
-%%             counter(Pid, Id); % race condition
-%%         {error, _Reason} -> 
-%%             Res1 = fetch(Pid, ["INSERT INTO counters (name, value) VALUES (",
-%%                     pack_value(Id), ", ", pack_value(Count), ")"]),
-%%             case Res1 of
-%%                 {updated, _} -> counter(Pid, Id); % race condition
-%%                 {error, MysqlRes} -> {error, mysql:get_result_reason(MysqlRes)}
-%%             end
-%%     end.
+    case Res of
+        {updated, _} ->
+            counter(Pid, Id); % race condition
+        {error, _Reason} -> 
+            Res1 = fetch(Pid, ["INSERT INTO counters (name, value) VALUES (",
+                    pack_value(Id), ", ", pack_value(Count), ")"]),
+            case Res1 of
+                {updated, _} -> counter(Pid, Id); % race condition
+                {error, MysqlRes} -> {error, mysql:get_result_reason(MysqlRes)}
+            end
+    end.
 
-%%REFAC
 delete(Pid, Id) when is_list(Id) ->
     {_, TableName, IdColumn, TableId} = boss_sql_lib:infer_type_from_id(Id),
-    Res = emysql:execute(Pid, ["DELETE FROM `", TableName, "` WHERE `", IdColumn, "` = ", 
-                               pack_value(TableId)]),
+    Res = fetch(Pid, ["DELETE FROM ", TableName, " WHERE ", IdColumn, " = ", 
+            pack_value(TableId)]),
     case Res of
-        #result_packet{} ->
-            emysql:execute(Pid, ["DELETE FROM counters WHERE name = ", 
+        {updated, _} ->
+            fetch(Pid, ["DELETE FROM counters WHERE name = ", 
                     pack_value(Id)]),
             ok;
-        #error_packet{}  ->
-            {error, Res#error_packet.msg}
+        {error, MysqlRes} -> {error, mysql:get_result_reason(MysqlRes)}
     end.
 
-
-%%REFAC
 save_record(Pid, Record) when is_tuple(Record) ->
     case Record:id() of
         id ->
-            Type  = element(1, Record),
+            Type = element(1, Record),
             Query = build_insert_query(Record),
-            Res   = fetch(Pid, Query),
+            Res = fetch(Pid, Query),
             case Res of
-                #ok_packet{} ->
+                {updated, _} ->
                     Res1 = fetch(Pid, "SELECT last_insert_id()"),
                     case Res1 of
-                        #result_packet{rows =[[Id]]} ->
+                        {data, MysqlRes} ->
+                            [[Id]] = mysql:get_result_rows(MysqlRes),
                             {ok, Record:set(id, lists:concat([Type, "-", integer_to_list(Id)]))};
-
-                        #error_packet{}  ->
-                            {error, Res#error_packet.msg}
-
+                        {error, MysqlRes} ->
+                            {error, mysql:get_result_reason(MysqlRes)}
                     end;
-                #error_packet{}  ->
-                    {error, Res#error_packet.msg}
- 
+                {error, MysqlRes} -> {error, mysql:get_result_reason(MysqlRes)}
             end;
         Identifier when is_integer(Identifier) ->
-            Type  = element(1, Record),
+            Type = element(1, Record),
             Query = build_insert_query(Record),
-            Res   = fetch(Pid, Query),
+            Res = fetch(Pid, Query),
             case Res of
-                #ok_packet{} ->
+                {updated, _} ->
                     {ok, Record:set(id, lists:concat([Type, "-", integer_to_list(Identifier)]))};
-                #error_packet{}  ->
-                    {error, Res#error_packet.msg}
-                
+                {error, MysqlRes} -> {error, mysql:get_result_reason(MysqlRes)}
             end;			
         Defined when is_list(Defined) ->
             Query = build_update_query(Record),
             Res = fetch(Pid, Query),
             case Res of
-                #ok_packet{} -> {ok, Record};
-                #error_packet{}  ->
-                            {error, Res#error_packet.msg}
+                {updated, _} -> {ok, Record};
+                {error, MysqlRes} -> {error, mysql:get_result_reason(MysqlRes)}
             end
     end.
 
@@ -272,7 +170,6 @@ execute(Pid, Commands) ->
 transaction(Pid, TransactionFun) when is_function(TransactionFun) ->
     do_transaction(Pid, TransactionFun).
     
-%REFAC
 do_transaction(Pid, TransactionFun) when is_function(TransactionFun) ->
     case do_begin(Pid, self()) of
         {error, _} = Err ->	
@@ -290,7 +187,7 @@ do_transaction(Pid, TransactionFun) when is_function(TransactionFun) ->
                     {aborted, Err};
                 Res ->
                     case do_commit(Pid, self()) of
-                        #error_packet{} = Err ->
+                        {error, _} = Err ->
                             do_rollback(Pid, self()),
                             {aborted, Err};
                         _ ->
@@ -313,7 +210,7 @@ get_migrations_table(Pid) ->
 
 migration_done(Pid, Tag, up) ->
     fetch(Pid, ["INSERT INTO schema_migrations (version, migrated_at) values (",
-                atom_to_list(Tag), ", NOW())"]);
+                 atom_to_list(Tag), ", NOW())"]);
 migration_done(Pid, Tag, down) ->
     fetch(Pid, ["DELETE FROM schema_migrations WHERE version = ", atom_to_list(Tag)]).
 
@@ -322,32 +219,26 @@ migration_done(Pid, Tag, down) ->
 %% integer_to_id(Val, KeyString) ->
 %%     ModelName = string:substr(KeyString, 1, string:len(KeyString) - string:len("_id")),
 %%     ModelName ++ "-" ++ integer_to_list(Val).
-%REFAC
-convert_cols(Metadata) ->
-    [{Field,Index}|| #field{name=Field, 
-                seq_num = Index}<- Metadata].
 
-activate_record(Record, Columns, Type) ->
-    Metadata           = convert_cols(Columns),
-    AttributeTypes     = boss_record_lib:attribute_types(Type),
-    AttributeColumns   = boss_record_lib:database_columns(Type),
+activate_record(Record, Metadata, Type) ->
+    AttributeTypes = boss_record_lib:attribute_types(Type),
+    AttributeColumns = boss_record_lib:database_columns(Type),
+
     RetypedForeignKeys = boss_sql_lib:get_retyped_foreign_keys(Type),
 
     apply(Type, new, lists:map(fun
                 (id) ->
                     DBColumn = proplists:get_value('id', AttributeColumns),
-                    Index    = keyindex(list_to_binary(DBColumn), 1, Metadata),
-                    atom_to_list(Type) ++ "-" ++ integer_to_list(lists:nth(Index , Record));
+                    Index = keyindex(list_to_binary(DBColumn), 2, Metadata),
+                    atom_to_list(Type) ++ "-" ++ integer_to_list(lists:nth(Index, Record));
                 (Key) ->
                     DBColumn = proplists:get_value(Key, AttributeColumns),
-                    Index    = keyindex(list_to_binary(DBColumn), 1, Metadata),
+                    Index = keyindex(list_to_binary(DBColumn), 2, Metadata),
                     AttrType = proplists:get_value(Key, AttributeTypes),
                     case lists:nth(Index, Record) of
-                        undefined            -> 
-                            undefined;
-                        {datetime, DateTime} -> 
-                            boss_record_lib:convert_value_to_type(DateTime, AttrType);
-                        Val                  -> 
+                        undefined -> undefined;
+                        {datetime, DateTime} -> boss_record_lib:convert_value_to_type(DateTime, AttrType);
+                        Val -> 
                             boss_sql_lib:convert_possible_foreign_key(RetypedForeignKeys, Type, Key, Val, AttrType)
                     end
             end, boss_record_lib:attribute_names(Type))).
@@ -367,7 +258,7 @@ sort_order_sql(descending) ->
     "DESC";
 sort_order_sql(ascending) ->
     "ASC".
-%REFAC
+
 build_insert_query(Record) ->
     Type = element(1, Record),
     TableName = boss_record_lib:database_table(Type),
@@ -498,18 +389,18 @@ build_conditions1([{Key, 'contains_none', Values}|Rest], Acc) when is_list(Value
     build_conditions1(Rest, add_cond(Acc, pack_match_not(Key), "AGAINST", pack_boolean_query(Values, ""))).
 
 add_cond(Acc, Key, Op, PackedVal) ->
-    [[Key, " ", Op, " ", PackedVal, " AND "]|Acc].
+    [lists:concat([Key, " ", Op, " ", PackedVal, " AND "])|Acc].
 
 pack_match(Key) ->
-    ["MATCH(", Key, ")"].
+    lists:concat(["MATCH(", Key, ")"]).
 
 pack_match_not(Key) ->
-    ["NOT MATCH(", Key, ")"].
+    lists:concat(["NOT MATCH(", Key, ")"]).
 
 pack_boolean_query(Values, Op) ->
-    ["('" ,lists:map(fun(Val) -> [Op, escape_sql(Val)] end, Values), " ", "' IN BOOLEAN MODE)"].
+    "('" ++ string:join(lists:map(fun(Val) -> Op ++ escape_sql(Val) end, Values), " ") ++ "' IN BOOLEAN MODE)".
 pack_set(Values) ->
-    ["(" , lists:map(fun pack_value/1, Values), ")"].
+    "(" ++ string:join(lists:map(fun pack_value/1, Values), ", ") ++ ")".
 
 pack_range(Min, Max) ->
     pack_value(Min) ++ " AND " ++ pack_value(Max).
@@ -534,15 +425,15 @@ pack_date(Date) ->
 %pack_now(Now) -> pack_datetime(calendar:now_to_datetime(Now)).
 
 pack_value(null) ->
-    "null";
+	"null";
 pack_value(undefined) ->
-    "null";
+	"null";
 pack_value(V) when is_binary(V) ->
     pack_value(binary_to_list(V));
 pack_value(V) when is_list(V) ->
-    emysql_util:encode(V);
+    mysql:encode(V);
 pack_value({_, _, _} = Val) ->
-    pack_date(Val);    
+	pack_date(Val);    
 pack_value({{_, _, _}, {_, _, _}} = Val) ->
     pack_datetime(Val);
 pack_value(Val) when is_integer(Val) ->
@@ -554,8 +445,7 @@ pack_value(true) ->
 pack_value(false) ->
     "FALSE".
 
-fetch(Pool, Query) ->
-    lager:notice("Query ~s", [iolist_to_binary(Query)]),
-    emysql:execute(Pool, iolist_to_binary(Query)).
-
+fetch(Pid, Query) ->
+    lager:info("Query ~s", [iolist_to_binary(Query)]),
+    mysql_conn:fetch(Pid, [Query], self()).
 

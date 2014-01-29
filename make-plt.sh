@@ -10,7 +10,7 @@ if [ ! -f $PLT ]; then
        syntax_tools edoc xmerl public_key inets\
        --statistics\
        --output_plt $PLT
-
+   rm riak_pb/ebin/*pb.beam
    echo "********************************************************************************"
    dialyzer --add_to_plt deps/*/ebin						--plt $PLT
    echo "********************************************************************************"
